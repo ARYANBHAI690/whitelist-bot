@@ -1,13 +1,18 @@
 {
   "name": "whitelist-bot",
   "version": "1.0.0",
-  "description": "Discord Minecraft whitelist bot",
+  "description": "Discord Whitelist Bot",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
+    "discord.js": "^14.15.3",
+    "express": "^4.19.2",
     "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
