@@ -23,7 +23,7 @@ const CLIENT_ID = process.env.CLIENT_ID; // application id
 const PORT = process.env.PORT || 3000;
 
 // Server branding
-const SERVER_NAME = "mcFleet SMP";
+const SERVER_NAME = "AnarchyX SMP";
 
 // Theme colors
 const THEME = {
