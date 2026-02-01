@@ -1,5 +1,4 @@
 require("dotenv").config();
-
 const {
   Client,
   GatewayIntentBits,
@@ -15,121 +14,119 @@ const {
   Routes,
   EmbedBuilder
 } = require("discord.js");
+const express = require("express");
 
-const fs = require("fs");
+/* ================= CONFIG ================= */
 
-/* ========= ENV ========= */
+const TOKEN = process.env.TOKEN;        // bot token
+const CLIENT_ID = process.env.CLIENT_ID; // application id
+const PORT = process.env.PORT || 3000;
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
+// Server branding
+const SERVER_NAME = "mcFleet SMP";
 
-if (!TOKEN || !CLIENT_ID) {
-  console.error("❌ TOKEN or CLIENT_ID missing in .env");
-  process.exit(1);
-}
+// Theme colors
+const THEME = {
+  primary: 0x5865F2,
+  success: 0x57F287,
+  warning: 0xFEE75C
+};
 
-/* ========= CLIENT ========= */
+// Emojis
+const EMOJI = {
+  panel: "🧩",
+  whitelist: "📥",
+  rename: "✏️",
+  java: "☕",
+  bedrock: "🪨",
+  success: "✅",
+  user: "👤"
+};
+
+/* ================= CLIENT ================= */
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-/* ========= CONFIG ========= */
+/* ================= ANTI SLEEP ================= */
 
-const CONFIG_FILE = "./config.json";
+const app = express();
+app.get("/", (req, res) => res.send("🟢 Bot is alive"));
+app.listen(PORT, () => console.log("🌍 Anti-sleep web server running"));
 
-let config = fs.existsSync(CONFIG_FILE)
-  ? JSON.parse(fs.readFileSync(CONFIG_FILE))
-  : { logChannel: null, whitelistChannel: null };
+/* ================= UTILS ================= */
 
-const saveConfig = () =>
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+function detectEdition(username) {
+  if (username.startsWith(".")) return `${EMOJI.bedrock} Bedrock`;
+  if (/^[a-zA-Z0-9_]{3,16}$/.test(username)) return `${EMOJI.java} Java`;
+  return "❓ Unknown";
+}
 
-let logChannel, whitelistChannel;
-
-/* ========= SLASH COMMAND ========= */
+/* ================= SLASH COMMAND ================= */
 
 const commands = [
   new SlashCommandBuilder()
     .setName("whitelist-panel")
-    .setDescription("Open Minecraft whitelist panel")
+    .setDescription("Open whitelist panel")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
   try {
-    console.log("⏳ Registering slash commands...");
     await rest.put(
       Routes.applicationCommands(CLIENT_ID),
       { body: commands }
     );
-    console.log("✅ Slash commands registered!");
-  } catch (err) {
-    console.error("❌ Slash command error:", err);
+    console.log("✅ Slash command registered");
+  } catch (e) {
+    console.error("❌ Slash command error", e);
   }
 })();
 
-/* ========= READY ========= */
+/* ================= READY ================= */
 
 client.once("ready", () => {
-  if (config.logChannel)
-    logChannel = client.channels.cache.get(config.logChannel);
-
-  if (config.whitelistChannel)
-    whitelistChannel = client.channels.cache.get(config.whitelistChannel);
-
-  console.log(`🟢 Logged in as ${client.user.tag}`);
+  console.log(`🤖 Logged in as ${client.user.tag}`);
 });
 
-/* ========= UI ========= */
+/* ================= UI BUTTONS ================= */
 
-const panelButtons = () =>
-  new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("whitelist")
-      .setLabel("Whitelist")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("rename")
-      .setLabel("Rename")
-      .setStyle(ButtonStyle.Primary)
-  );
+const buttons = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId("whitelist")
+    .setLabel("Whitelist")
+    .setEmoji(EMOJI.whitelist)
+    .setStyle(ButtonStyle.Success),
+  new ButtonBuilder()
+    .setCustomId("rename")
+    .setLabel("Rename")
+    .setEmoji(EMOJI.rename)
+    .setStyle(ButtonStyle.Primary)
+);
 
-/* ========= INTERACTIONS ========= */
+/* ================= INTERACTIONS ================= */
 
 client.on("interactionCreate", async (interaction) => {
 
-  /* SLASH COMMAND */
+  /* PANEL */
   if (interaction.isChatInputCommand() &&
       interaction.commandName === "whitelist-panel") {
 
-    if (!config.logChannel || !config.whitelistChannel) {
-      config.logChannel = interaction.channel.id;
-      config.whitelistChannel = interaction.channel.id;
-      saveConfig();
-
-      logChannel = interaction.channel;
-      whitelistChannel = interaction.channel;
-
-      return interaction.reply({
-        content: "✅ Channels saved. Run the command again.",
-        ephemeral: true
-      });
-    }
-
-    const panelEmbed = new EmbedBuilder()
-      .setTitle("🧾 Minecraft Whitelist System")
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJI.panel} ${SERVER_NAME} Whitelist System`)
       .setDescription(
-        "Use the buttons below to **whitelist** or **rename** your Minecraft username."
+        `${EMOJI.whitelist} **Whitelist** – Add your Minecraft username\n` +
+        `${EMOJI.rename} **Rename** – Change your username`
       )
-      .setColor(0x2ecc71)
-      .setFooter({ text: "mcFleet Whitelist Panel" })
-      .setTimestamp();
+      .setColor(THEME.primary)
+      .setThumbnail(interaction.guild?.iconURL({ dynamic: true }))
+      .setFooter({ text: "Fast • Clean • Automatic" });
 
     return interaction.reply({
-      embeds: [panelEmbed],
-      components: [panelButtons()]
+      embeds: [embed],
+      components: [buttons]
     });
   }
 
@@ -178,56 +175,47 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.type === InteractionType.ModalSubmit &&
       interaction.customId === "whitelist_modal") {
 
-    await interaction.deferReply({ ephemeral: true });
-
     const username = interaction.fields.getTextInputValue("username");
-    const edition = username.startsWith(".") ? "Bedrock" : "Java";
+    const edition = detectEdition(username);
 
-    const whitelistEmbed = new EmbedBuilder()
-      .setTitle("📥 Whitelist Added")
-      .setColor(0x57f287)
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJI.success} Whitelisted`)
       .addFields(
-        { name: "User", value: interaction.user.tag, inline: true },
-        { name: "Username", value: username, inline: true },
+        { name: `${EMOJI.user} Username`, value: username, inline: true },
         { name: "Edition", value: edition, inline: true }
       )
-      .setThumbnail(interaction.user.displayAvatarURL())
+      .setColor(THEME.success)
       .setTimestamp();
 
-    logChannel.send({ embeds: [whitelistEmbed] });
-    whitelistChannel.send(`whitelist add ${username}`);
-
-    return interaction.editReply("✅ Whitelisted successfully!");
+    return interaction.reply({
+      embeds: [embed],
+      ephemeral: true
+    });
   }
 
   /* RENAME SUBMIT */
   if (interaction.type === InteractionType.ModalSubmit &&
       interaction.customId === "rename_modal") {
 
-    await interaction.deferReply({ ephemeral: true });
-
     const oldName = interaction.fields.getTextInputValue("old");
     const newName = interaction.fields.getTextInputValue("new");
 
-    const renameEmbed = new EmbedBuilder()
-      .setTitle("✏️ Username Renamed")
-      .setColor(0xfaa61a)
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJI.rename} Rename Complete`)
       .addFields(
-        { name: "User", value: interaction.user.tag, inline: true },
         { name: "Old Username", value: oldName, inline: true },
         { name: "New Username", value: newName, inline: true }
       )
-      .setThumbnail(interaction.user.displayAvatarURL())
+      .setColor(THEME.warning)
       .setTimestamp();
 
-    logChannel.send({ embeds: [renameEmbed] });
-    whitelistChannel.send(`whitelist remove ${oldName}`);
-    whitelistChannel.send(`whitelist add ${newName}`);
-
-    return interaction.editReply("✅ Rename completed!");
+    return interaction.reply({
+      embeds: [embed],
+      ephemeral: true
+    });
   }
 });
 
-/* ========= LOGIN ========= */
+/* ================= LOGIN ================= */
 
 client.login(TOKEN);
